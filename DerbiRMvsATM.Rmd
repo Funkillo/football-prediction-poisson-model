@@ -1,0 +1,203 @@
+---
+title: "Derbi"
+author: "Juan Antonio Sánchez Marín"
+date: "2026-03-20"
+output: html_document
+---
+
+```{r}
+
+# =========================================================================
+# MODELO PREDICTIVO: SIMULADOR DE PARTIDOS DE FÚTBOL (POISSON)
+# =========================================================================
+# Este script utiliza la Distribución de Poisson para simular 100.000 
+# escenarios de un partido de fútbol basándose en el histórico de goles.
+#
+# INSTRUCCIONES: 
+# Solo necesitas cambiar los valores de la SECCIÓN 1 con los datos 
+# actualizados de los equipos que quieras analizar.
+# =========================================================================
+
+# Instalar y cargar la librería para las gráficas (descomentar si no está instalada)
+# install.packages("ggplot2")
+library(ggplot2)
+
+# =========================================================================
+# 1. INGRESO DE DATOS (¡CAMBIA ESTOS VALORES PARA TU PARTIDO!)
+# =========================================================================
+
+# Datos generales de la competición
+partidos_jugados_equipo <- 28 
+mitad_partidos <- partidos_jugados_equipo / 2 # Partidos jugados como local/visitante
+
+# DATOS EQUIPO LOCAL (Ejemplo: Real Madrid)
+nombre_local <- "Real Madrid"
+local_gf_total <- 60  # Goles a favor en total
+local_gf_casa <- 33   # Goles a favor jugando EN CASA
+local_gc_total <- 24  # Goles en contra en total
+
+# Jugadores a destacar - Local (Opcional, para la gráfica de goleadores)
+jugador1_local_nombre <- "Mbappé"
+jugador1_local_goles <- 23
+jugador2_local_nombre <- "Vinícius Jr."
+jugador2_local_goles <- 9
+
+# DATOS EQUIPO VISITANTE (Ejemplo: Atlético de Madrid)
+nombre_visitante <- "Atlético"
+visitante_gf_total <- 47  # Goles a favor en total
+visitante_gf_fuera <- 13  # Goles a favor jugando FUERA
+visitante_gc_total <- 25  # Goles en contra en total
+
+# Jugadores a destacar - Visitante (Opcional)
+jugador1_visitante_nombre <- "Sørloth"
+jugador1_visitante_goles <- 10
+jugador2_visitante_nombre <- "Julián Alvarez"
+jugador2_visitante_goles <- 8
+
+
+# =========================================================================
+# 2. CÁLCULO DE LAMBDA (FUERZA OFENSIVA/DEFENSIVA)
+# =========================================================================
+
+# Promedios de goles recibidos en la liga (debilidad defensiva)
+local_media_gc <- local_gc_total / partidos_jugados_equipo
+visitante_media_gc <- visitante_gc_total / partidos_jugados_equipo
+
+# Promedios de goles marcados según condición (fortaleza ofensiva)
+local_media_gf_casa <- local_gf_casa / mitad_partidos
+visitante_media_gf_fuera <- visitante_gf_fuera / mitad_partidos
+
+# Lambda (xG esperado): Media entre la fuerza de ataque propia y la debilidad del rival
+lambda_local <- (local_media_gf_casa + visitante_media_gc) / 2
+lambda_visitante <- (visitante_media_gf_fuera + local_media_gc) / 2
+
+
+# =========================================================================
+# 3. SIMULACIÓN DE MONTECARLO (100.000 PARTIDOS)
+# =========================================================================
+
+set.seed(2026) # Semilla para que el resultado sea reproducible
+n_simulaciones <- 100000 
+
+# Generamos los goles de cada equipo usando la distribución de Poisson
+sim_local <- rpois(n_simulaciones, lambda_local)
+sim_visitante <- rpois(n_simulaciones, lambda_visitante)
+
+# Creamos el dataframe con todos los resultados
+simulacion <- data.frame(Local = sim_local, Visitante = sim_visitante)
+
+# ¡ESTO ABRE LA TABLA COMPLETA EN RSTUDIO PARA VER LOS 100.000 RESULTADOS!
+View(simulacion)
+
+
+# =========================================================================
+# 4. EXTRACCIÓN DE PROBABILIDADES
+# =========================================================================
+
+# 1X2
+prob_1 <- mean(simulacion$Local > simulacion$Visitante) * 100
+prob_X <- mean(simulacion$Local == simulacion$Visitante) * 100
+prob_2 <- mean(simulacion$Local < simulacion$Visitante) * 100
+
+# Resultados Exactos
+resultados_freq <- as.data.frame(table(simulacion$Local, simulacion$Visitante))
+colnames(resultados_freq) <- c("Goles_Local", "Goles_Visitante", "Frecuencia")
+resultados_freq$Goles_Local <- as.numeric(as.character(resultados_freq$Goles_Local))
+resultados_freq$Goles_Visitante <- as.numeric(as.character(resultados_freq$Goles_Visitante))
+
+# Ordenar de mayor a menor probabilidad
+resultados_freq <- resultados_freq[order(-resultados_freq$Frecuencia), ]
+top_resultados <- head(resultados_freq, 5)
+top_resultados$Probabilidad <- (top_resultados$Frecuencia / n_simulaciones) * 100
+top_resultados$Etiqueta <- paste(top_resultados$Goles_Local, "-", top_resultados$Goles_Visitante)
+
+# Probabilidades Individuales (Basado en el peso goleador)
+prob_j1_local <- (1 - dpois(0, lambda_local * (jugador1_local_goles / local_gf_total))) * 100
+prob_j2_local <- (1 - dpois(0, lambda_local * (jugador2_local_goles / local_gf_total))) * 100
+prob_j1_visitante <- (1 - dpois(0, lambda_visitante * (jugador1_visitante_goles / visitante_gf_total))) * 100
+prob_j2_visitante <- (1 - dpois(0, lambda_visitante * (jugador2_visitante_goles / visitante_gf_total))) * 100
+
+
+# =========================================================================
+# 5. IMPRESIÓN DEL INFORME EN CONSOLA
+# =========================================================================
+
+cat("\n======================================================\n")
+cat(sprintf("INFORME ESTADÍSTICO: %s vs %s\n", toupper(nombre_local), toupper(nombre_visitante)))
+cat("======================================================\n\n")
+
+cat(">> GOLES ESPERADOS (xG Estadístico):\n")
+cat(sprintf("- %s: %.2f goles\n", nombre_local, lambda_local))
+cat(sprintf("- %s: %.2f goles\n\n", nombre_visitante, lambda_visitante))
+
+cat(">> PROBABILIDADES DE VICTORIA (1X2):\n")
+cat(sprintf("- Victoria %s (1): %.2f%%\n", nombre_local, prob_1))
+cat(sprintf("- Empate (X):            %.2f%%\n", prob_X))
+cat(sprintf("- Victoria %s (2): %.2f%%\n\n", nombre_visitante, prob_2))
+
+cat(">> TOP 5 RESULTADOS EXACTOS MÁS PROBABLES:\n")
+for(i in 1:5) {
+  cat(sprintf("%d. %s %s - %s %s (%.2f%%)\n", 
+              i, 
+              nombre_local, top_resultados$Goles_Local[i], 
+              top_resultados$Goles_Visitante[i], nombre_visitante, 
+              top_resultados$Probabilidad[i]))
+}
+cat("======================================================\n")
+
+
+
+
+```
+
+```{r}
+# =========================================================================
+# 6. GENERACIÓN DE GRÁFICOS (GGPLOT2)
+# =========================================================================
+
+# Preparar datos para gráficos
+df_1x2 <- data.frame(
+  Resultado = c(paste("Victoria", nombre_local), "Empate", paste("Victoria", nombre_visitante)),
+  Probabilidad = c(prob_1, prob_X, prob_2),
+  Color = c("#FFFFFF", "#CCCCCC", "#E53935") # Ajusta colores si cambias de equipo
+)
+
+df_jugadores <- data.frame(
+  Jugador = c(jugador1_local_nombre, jugador2_local_nombre, jugador1_visitante_nombre, jugador2_visitante_nombre),
+  Equipo = c(nombre_local, nombre_local, nombre_visitante, nombre_visitante),
+  Probabilidad = c(prob_j1_local, prob_j2_local, prob_j1_visitante, prob_j2_visitante)
+)
+
+# Gráfico 1: Probabilidades 1X2
+g_1x2 <- ggplot(df_1x2, aes(x = reorder(Resultado, -Probabilidad), y = Probabilidad, fill = Color)) +
+  geom_bar(stat = "identity", color = "black", linewidth = 0.5) +
+  scale_fill_identity() +
+  geom_text(aes(label = sprintf("%.1f%%", Probabilidad)), vjust = -0.5, fontface = "bold") +
+  theme_minimal() +
+  labs(title = "Probabilidad de Victoria", subtitle = paste(n_simulaciones, "simulaciones ejecutadas"), x = "", y = "Probabilidad (%)")
+
+# Gráfico 2: Top Resultados
+g_resultados <- ggplot(top_resultados, aes(x = reorder(Etiqueta, Probabilidad), y = Probabilidad)) +
+  geom_bar(stat = "identity", fill = "#1E88E5", color = "black") +
+  coord_flip() +
+  geom_text(aes(label = sprintf("%.1f%%", Probabilidad)), hjust = -0.2, fontface = "bold") +
+  theme_minimal() +
+  labs(title = "Resultados Exactos Más Probables", x = "Marcador", y = "Probabilidad (%)")
+
+# Gráfico 3: Goleadores
+g_jugadores <- ggplot(df_jugadores, aes(x = reorder(Jugador, Probabilidad), y = Probabilidad, fill = Equipo)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = setNames(c("#E0E0E0", "#E53935"), c(nombre_local, nombre_visitante))) +
+  coord_flip() +
+  geom_text(aes(label = sprintf("%.1f%%", Probabilidad)), hjust = -0.2, fontface = "bold") +
+  theme_minimal() +
+  labs(title = "Probabilidad de marcar al menos 1 gol", x = "", y = "Probabilidad (%)")
+
+# Imprimir gráficos en RStudio
+print(g_1x2)
+print(g_resultados)
+print(g_jugadores)
+
+```
+```{r}
+
